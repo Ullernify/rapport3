@@ -1,0 +1,276 @@
+---
+title: "Slutninger basert på statistisk styrke og modeller"
+author: "Ulrich"
+format: html
+editor_options: 
+  chunk_output_type: console
+---
+
+# Rapport 3: Slutninger basert på statistisk styrke og modeller
+
+## Simulering 
+I koden under simuleres en populasjon på 1 million med et gjennomsnitt på 1.5 og et standaravvik på 3. For å kunne reprodusere resultatene benyttes set.seed(1). Deretter skapes det to studier hvor det trekkes to tilfeldige utvalg, et på 8 (samp1) og et på 40 (samp2). Videre lages en lineær modell for samp1 og samp2 som lagres som m1 og m2.
+
+```{r}
+#| code-fold: true
+#| message: false
+#| warning: false
+
+library(tidyverse)
+
+# Muliggjør reproduksjon av resultater
+set.seed(1)
+
+# Simuler en populajson
+population <- rnorm(1000000, mean = 1.5, sd = 3)
+
+# Lag en studie med et utvalg på 8 hvor den avhengige variabelen heter y
+samp1 <- data.frame(y = sample(population, 8, replace = FALSE))
+
+# Lag en studie med et utvalg på 40 hvor den avhengige variabelen heter y
+samp2 <- data.frame(y = sample(population, 40, replace = FALSE))
+
+# Lag en lineær modell fra utvalg 1 og lagre den som m1
+m1 <- lm(y ~ 1, data = samp1)
+# Lag en lineær modell fra utvalg 2 og lagre den som m2
+m2 <- lm(y ~ 1, data = samp2)
+
+
+
+est_8 <- coef(m1)[1]
+est_40 <- coef(m2)[1]
+
+
+
+
+``` 
+
+## 1. Forklaring av "estimate", "Standard error", "t-value" og "p-value" fra m1 og m2
+
+Estimatet er en kalkulert teoretisk verdi av snittet til samp1 (`r round(est_8, digits = 3)`) og samp2 (`r round(est_40, digits = 3)`).
+Standard feil er et estimert tall på variasjon i populasjonen basert på et utvalg. I dette tilfellet 1.251 (samp1) og 0.4774 (m2).
+T-verdi gir i denne simulerte studien en p-verdi på 0.185 (m1) og 0.002 (m2). T-verdien brukes her sammen med størrelsen på utvalget (-1) (m1, N = 8-1) for å finne p-verdien, dette igjen sier at vi vil finne en t-verdi så ekstrem eller mer ekstrem som i vår studie 18.5% av gangene (m1) om vi kjørte samme analyse av studien mange ganger.
+
+
+## 2. Hvorfor forkjellig resultat i m1 og m2?
+
+Størrelsen på utvalget gir forskjellig avvik fra gjennomsnittet. m1 med et utvalg på 8 har større standardfeil da det er større sannsynlighet for at det er større variasjon i utvalget. Slik jeg forstår det vil en "uteligger" i en studie hvor N = 8 påvirke gjennomsnittet i større grad og derfor gi større utslag på standardfeilen. Dette fører igjen til en høyere p-verdi.
+
+## 3. Hvorfor bruker vi det skraverte området i nedre og øvre del av en t-distribusjon?
+
+Det skraverte området i en t-distribusjon skalerer sannsynligheten for å få en verdi dersom nullhypotesen er sann for populasjonen. 
+
+## Mange studier
+
+I koden under simulerers studiene vi har laget 1000 ganger og lagres som results_8 og results_40. 
+
+```{r}
+#| code-fold: true
+#| message: false
+#| warning: false
+
+set.seed(1)
+# Create data frames to store the model estimates
+results_8 <- data.frame(estimate = rep(NA, 1000), 
+                      se = rep(NA, 1000), 
+                      pval = rep(NA, 1000), 
+                      n = 8)  
+
+results_40 <- data.frame(estimate = rep(NA, 1000), 
+                      se = rep(NA, 1000), 
+                      pval = rep(NA, 1000), 
+                      n = 40)
+
+# A for loop used to sample 1000 studies, each iteration (i) will draw a new sample
+# from the population. 
+
+for(i in 1:1000) {
+  
+  # Draw a sample 
+  samp1 <- data.frame(y = sample(population, 8, replace = FALSE))
+  samp2 <- data.frame(y = sample(population, 40, replace = FALSE))
+
+  # Model the data
+  m1 <- lm(y ~ 1, data = samp1)
+  m2 <- lm(y ~ 1, data = samp2)
+  
+  # Extract values from the models
+  results_8[i, 1] <- coef(summary(m1))[1, 1]
+  results_8[i, 2] <- coef(summary(m1))[1, 2]
+  results_8[i, 3] <- coef(summary(m1))[1, 4]
+
+  results_40[i, 1] <- coef(summary(m2))[1, 1]
+  results_40[i, 2] <- coef(summary(m2))[1, 2]
+  results_40[i, 3] <- coef(summary(m2))[1, 4]
+  
+  
+}
+
+
+# Save the results in a combined data frame
+
+results <- bind_rows(results_8, results_40)
+
+# Utregning standardavvik av estimert gjennomsnitt
+sd_res_8 <- sd(results_8$estimate)
+sd_res_40 <- sd(results_40$estimate)
+
+# Utregning gjennomsnitt av standardfeil
+se_mean_8 <- mean(results_8$se)
+se_mean_40 <- mean(results_40$se)
+
+
+
+
+```
+
+## 4. Hvorfor er sandardavviket til estimert gjennomsnitt så lik standardfeilen i dette tilfellet?
+
+Standardavviket til variabelen estimate, i simuleringen hvor n = 8 (sim8) og n = 40 (sim40), er `r round(sd_res_8, digits = 3)` og `r round(sd_res_40, digits = 3)`. Gjennomsnittlig standardfeil for sim8 og sim40 er `r round(se_mean_8, digits = 3)` og `r round(se_mean_40, digits = 3)`. Jeg tror standardavviket samsvarer godt med standardfeilen fordi studiene nå er gjort 1000 ganger med tilfeldig valgt utvalg fra populasjonen. Altså en større del av populasjonen er simulert med i studien og presisjonen er større.
+
+## 5. Histogram med p-verdier fra simuleringene, hva sier dette om statistisk styrke?
+
+```{r}
+#| code-fold: true
+#| message: false
+#| warning: false
+
+# Example code for copy and paste
+
+# A two facets histogram can be created with ggplot2
+results %>%
+  ggplot(aes(pval)) + 
+  geom_histogram(color = "red") +
+  facet_wrap(~ n)
+
+
+# Count the proportion of tests below a certain p-value for each 
+results %>%
+  filter(pval < 0.05) %>%
+  group_by(n) %>%
+  summarise(sig_results = n()/1000)
+
+
+
+
+```
+Histogrammene viser fordelingen av p-verdier fra studiene. P-verdiene fra studiene gjort med et utvalg på 8 har en bredere fordeling enn studiene gjort med utvalg på 40. Dette indikerer at et utvalg på 40 oftere vil føre til lavere p-verdi. Kan dette leses som større statistisk styrke? Ikke helt sikker, men jeg tror det henger sammen med mindre variasjon i et større utvalg som igjen påvirker statistikkens styrke.
+
+## 6. Filtrer resultater med en gitt p-verdi
+
+```{r}
+#| code-fold: true
+#| message: false
+#| warning: false
+n_sig_8 <- results %>% 
+  filter(pval < 0.05) %>% 
+  filter(n != 40) %>% 
+  nrow()
+
+n_sig_40 <- results %>% 
+  filter(pval < 0.05) %>% 
+  filter(n == 40) %>% 
+  nrow()
+```
+
+Av 1000 studier simulert med et utvlag på 8 hadde `r n_sig_8` studier p < 0.05. Med et utvalg på 40 var det `r n_sig_40` studier med p < 0.05.
+
+## 7. Test av statistisk styrke
+
+```{r}
+#| code-fold: true
+#| message: false
+#| warning: false
+
+library(pwr)
+
+pwr_40 <- pwr.t.test(n = 40, sig.level = 0.05, d = 1.5/3, type = "one.sample")
+pwr_8 <- pwr.t.test(n = 8, sig.level = 0.05, d= 1.5/3, type = "one.sample")
+
+numeric_pwr_40 <- pwr_40[["power"]]
+pwr_pros_40 <- numeric_pwr_40 * 100
+
+numeric_pwr_8 <- pwr_8[["power"]]
+pwr_pros_8 <- numeric_pwr_8 * 100
+```
+
+Styrken til studiene gjort med utvalg på 40 er `r round(pwr_pros_40, digits = 0)`% og et utvalg med 8 er `r round(pwr_pros_8, digits = 0)`%. Dette vil si at studiene gjort med utvalg på 40 har `r round(pwr_pros_40, digits = 0)`% for å fange opp en effekt om det er en effekt. 
+
+## 8. Hvor mange studier gir falsk positiv når signifikansnivået er satt til 5%?
+
+```{r}
+#| code-fold: true
+#| message: false
+#| warning: false
+set.seed(1)
+
+population <- rnorm(1000000, mean = 0, sd = 3)
+
+
+# Create data frames to store the model estimates
+results_8 <- data.frame(estimate = rep(NA, 1000), 
+                      se = rep(NA, 1000), 
+                      pval = rep(NA, 1000), 
+                      n = 8)  
+
+results_40 <- data.frame(estimate = rep(NA, 1000), 
+                      se = rep(NA, 1000), 
+                      pval = rep(NA, 1000), 
+                      n = 40)
+
+# A for loop used to sample 1000 studies, each iteration (i) will draw a new sample
+# from the population. 
+
+for(i in 1:1000) {
+  
+  # Draw a sample 
+  samp1 <- data.frame(y = sample(population, 8, replace = FALSE))
+  samp2 <- data.frame(y = sample(population, 40, replace = FALSE))
+
+  # Model the data
+  m1 <- lm(y ~ 1, data = samp1)
+  m2 <- lm(y ~ 1, data = samp2)
+
+  # Extract values from the models
+  results_8[i, 1] <- coef(summary(m1))[1, 1]
+  results_8[i, 2] <- coef(summary(m1))[1, 2]
+  results_8[i, 3] <- coef(summary(m1))[1, 4]
+
+  results_40[i, 1] <- coef(summary(m2))[1, 1]
+  results_40[i, 2] <- coef(summary(m2))[1, 2]
+  results_40[i, 3] <- coef(summary(m2))[1, 4]
+  
+  
+}
+
+
+# Save the results in a combined data frame
+
+results_null <- bind_rows(results_8, results_40)
+
+false_positive_resnull <- sum(results_null$pval <0.05)
+
+results_null %>%
+  ggplot(aes(pval)) + 
+  geom_histogram(color = "red") +
+  facet_wrap(~ n)
+
+n_sig_rnull_40 <- results_null %>% 
+  filter(pval < 0.05) %>% 
+  filter(n == 40) %>% 
+  nrow()
+
+n_sig_rnull_8 <- results_null %>% 
+  filter(pval < 0.05) %>% 
+  filter(n != 40) %>% 
+  nrow()
+
+```
+
+Hvis man gjør mange repeterte studier med utvalg på 40 kan man anta at `r n_sig_rnull_40` er falsk positiv og `r n_sig_rnull_8` for utvalg med 8. Her er jeg på dypt vann, Daniel, forstår ikke helt dette.
+
+
+
+
+
+
